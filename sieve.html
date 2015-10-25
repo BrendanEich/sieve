@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html>
+<meta charset="utf-8"/>
+<style>
+    /* Pick a classic fixed-width font for all body text. */
+    body { font-family: "Courier"; }
+
+    /* Magic to make tooltip showing factor-sets of numbers. */
+    .tooltip {
+        display: inline;
+        position: relative;
+    }
+
+    .tooltip:hover:before {
+        border: solid;
+        border-color: #333 transparent;
+        border-width: 6px 6px 0 6px;
+        bottom: 20px;
+        content: "";
+        left: 50%;
+        position: absolute;
+        z-index: 99;
+    }
+
+    .tooltip:hover:after {
+        background: #333;
+        background: rgba(0,0,0,.8);
+        border-radius: 5px;
+        bottom: 26px;
+        color: #fff;
+        content: attr(title);
+        left: 20%;
+        padding: 5px 15px;
+        position: absolute;
+        z-index: 98;
+        width: 220px;
+    }
+</style>
+<script>
+
+    /*
+     * The Sieve of Eratosthenes in JavaScript (ES6), written by Brendan Eich on
+     * October 4, 2015 for Natalie and Peter Eich.
+     *
+     * The code below use 'const' to declare CONSTANTS (conventionally written
+     * using all-capitals with _ between words to emphasize their fixed nature),
+     * 'var' for variables, '=>' and 'function' to express or declare functions.
+     * Most arithmetic operators are the same as in Mathematics, but JavaScript
+     * uses * not x for multiplication.
+     *
+     * There's a lot going on below, so please don't worry about understanding
+     * it all at once. I hope it will be worth reading and re-reading for years
+     * to come. I sincerely hope that you enjoy it. Try playing with the color
+     * constants just below for fun.
+     */
+
+    // Maximum number to sieve and table column count for 32x32.
+    const MAXIMUM = 1024;
+    const COLUMNS = 32;
+
+    // Foreground colors for numeric table data, by number kind.
+    const MERSENNE_COLOR         = 'gold';
+    const SOPHIE_GERMAIN_COLOR   = 'orange';
+    const MERSENNE_GERMAIN_COLOR = 'orangered';
+    const PRIME_COLOR            = 'firebrick';
+    const COMPOSITE_COLOR        = 'skyblue';
+
+    // Animation delay parameters, units are milliseconds. A delay value of 0
+    // makes the animation go as fast as it can.
+    const PRIME_DELAY     = 0;
+    const COMPOSITE_DELAY = 0;
+
+    /*
+     * Short helper functions, written using const to declare the function name
+     * and the arrow (=>) syntax to point from parameter or (parameters) to body
+     * expression. For example, x => x is the identity function (when called it
+     * returns its parameter); x => x*x is the square function for a number x.
+     *
+     * These functions use standard document methods that you can read about in
+     * a book or online documentation source describing the "DOM", the Document
+     * Object Model, which is how JavaScript talks to the elements of the page
+     * in which it runs.
+     */
+    const get = id => document.getElementById(id);
+    const write = s => document.write(s);
+
+    /*
+     * isMersenne(p) :: Prime -> Boolean
+     * isMersenne p = (p & (p + 1)) == 0
+     *
+     * Return true if p is a Mersenne prime, false otherwise. A prime number p
+     * is called a Mersenne prime (after Marin Mersenne (1588-1648), a Friar in
+     * 17th Century France) if p+1 is a power of two.
+     *
+     * !!! Skip this whole comment until later, it's a very advanced topic !!!
+     *
+     * We use a trick of machine arithmetic and bitwise logic here: the binary
+     * operator & takes two 32 bit integers and masks them together, so that
+     * each bit in the result is set if and only if both corresponding bits in
+     * the operands are set.
+     *
+     * Let's prove this function correctly returns true only if p+1 is a power
+     * of two, and false otherwise. We will use induction, starting from basis
+     * case p = 2, since 0 and 1 are neither prime nor composite, and showing a
+     * few successive cases:
+     *
+     * p = 2: (2 & 3) = (010 & 011) = 2 => false, 2 is not a Mersenne prime
+     * p = 3: (3 & 4) = (011 & 100) = 0 => true,  3 is a Mersenne prime
+     * p = 5: (5 & 6) = (101 & 110) = 4 => false, 5 is not a Mersenne prime
+     *
+     * Note that a power of two in binary has the form ...1... where the ...
+     * characters stand for zero or more 0 bits. E.g., 0001 binary is 1, 0010
+     * binary is 2, 0100 binary is 4, etc.
+     *
+     * Now assume isMersenne(k) returns the correct result for some integer k.
+     * To induct to isMersenne(k+1) we must consider two cases:
+     *
+     * 1. k is one less than a power of two greater than or equal to 2. Then k
+     * in binary has the form ...01+++ where the ... stands for zero or more 0
+     * bits and the +++ stands for zero or more 1 bits. Therefore k+1 in binary
+     * is ...1...0 and by lining up the bits:
+     *
+     * ...01+++
+     * ...1...0
+     *
+     * and masking along the columns according to the AND truth table:
+     *
+     * 0 & 0 => 0
+     * 0 & 1 => 0
+     * 1 & 0 => 0
+     * 1 & 1 => 1
+     *
+     * we get
+     *
+     * ...0...0
+     *
+     * or just 0. Thus for this case, (k & (k + 1)) is 0. Note how this result
+     * holds for k=1 and even k=0, even though neither 1 nor 0 is prime.
+     *
+     * 2. k is not one less than a power of two, yet k is still >= 2. Then k has
+     * form ???1???0+++ where the ??? stand for zero or more bits of either 0 or
+     * 1 value (and +++ and ... work as defined above).
+     *
+     * The smallest such k of ???1???0+++ form is 10 in binary or 2 in decimal.
+     * Therefore k+1 has form ???1???1... and masking bits results in the form
+     * ???1???0... which is non-zero due to the 1 bit in the middle. (Note by
+     * the assumption that k is not one less than a power of two, there must be
+     * at least one other 1 bit somewhere in k+1's binary form.)
+     *
+     * Therefore (k & (k + 1)) == 0 implies (k + 1) is a power of two, so for a
+     * known prime p, (p & (p + 1)) == 0 implies p is a Mersenne prime. Q.E.D.
+     */
+    const isMersenne = p => (p & (p + 1)) == 0;
+
+    /*
+     * padLeft(i, d) :: (Integer, Integer) -> String
+     *
+     * Return a string conversion of an integer i, space-padded on the left to
+     * d digit-widths.
+     *
+     * We use the full JavaScript 'function' keyword form to declare these more
+     * complex, multiline functions, instead of the => syntax. With either form,
+     * a function is a "black box", a little computer, into which you can pass
+     * values called parameters, and out of which you can get results, usually a
+     * single return value.
+     */
+    function padLeft(i, d) {
+        var s = '' + i;         // convert i to string type using '' + i
+        var n = s.length;
+        while (n < d) {
+            s = '&nbsp;' + s;   // pad with non-breaking space characters
+            n = n + 1;
+        }
+        return s;
+    }
+
+    /*
+     * table(n) :: Integer -> void
+     *
+     * Generate the table of numbers whose colors we will animate to show the
+     * Sieve of Eratosthenes as it operates.
+     */
+    function table(n) {
+        var a = ['<table>'];    // a accumulates the strings to join and write
+        var i = 1;
+        while (i <= n) {
+            // i % j is the remainder of i divided by j. This is how we know to
+            // start a new table row (tr) element: if in column 1, 33, 65, etc.
+            if (i % COLUMNS == 1) {
+                a.push('<tr>');
+            }
+
+            // Write the table datum element containing i padded to 4 spaces
+            // FIXME: MAXIMUM > 9999 requires 5 or more spaces; compute field width
+            a.push('<td id=' + i + ' class=tooltip title=' + i + '>' + padLeft(i, 4) + '</td>');
+
+            // Now check for the last column in a table row, to close the tr.
+            if (i % COLUMNS == 0) {
+                a.push('</tr>');
+            }
+            i = i + 1;
+        }
+        a.push('</table>');
+        write(a.join(''));      // join a's elements with '' in between each
+    }
+
+    /*
+     * sieve(n) :: Integer -> generator<Milliseconds>
+     *
+     * This is the Sieve of Eratosthenes, written as a JavaScript generator so
+     * it can be resumed from the browser's event loop, to animate color changes
+     * to the numbers in the table.
+     *
+     * This function has a star ('*') after its 'function' keyword, so it is a
+     * generator function, a special kind of function that can yield 0 or more
+     * values before it returns a final value. Each yield leaves the generator
+     * suspended, ready to be called again via the .next() method of the object
+     * it returns when called the first time by its name, to pick up computing
+     * where it left off.
+     *
+     * Each .next() call on the object returned from calling sieve(MAXIMUM) will
+     * return an object of the form {value, done}, where value conveys back the
+     * yielded or returned value, and done is true for the yield case and false
+     * for return (including falling off the end of the function body -- this is
+     * allowed, and it just returns undefined).
+     *
+     * Peek ahead below for how we call sieve and use its multiple yield results
+     * to animate table data color changes to show the sieve's progress.
+     */
+    function* sieve(n) {
+        // Start with 2 because we know 1 like 0 is neither prime nor composite.
+        var i = 2;
+        var td, td2;
+
+        while (i <= n) {
+            // Get the table datum identified by i and see if we've marked it
+            // yet with an 'isPrime' flag property.
+            td = get(i);
+
+            if (!td.hasOwnProperty('isPrime')) {
+                // We have not yet marked this number, so it must be prime.
+                td.isPrime = true;
+
+                // Now recolor this prime number by setting its foreground color
+                // to one of the prime colors we have chosen. We use the ternary
+                // conditional operator (A ? B : C) which evaluates to B if A is
+                // "truthy", else to C.
+                td.style.color = isMersenne(i) ? MERSENNE_COLOR : PRIME_COLOR;
+
+                // Tell our scheduler (the function named step, declared further
+                // below) to wait PRIME_DELAY milliseconds before continuing to
+                // sieve for more primes.
+                yield PRIME_DELAY;
+
+                // The sieve works by marking all multiples of the current prime
+                // as composite.
+                var j = i + i;
+                while (j <= n) {
+                    td = get(j);
+
+                    // For composite numbers, store a set recording each factor
+                    // in td.radical.
+                    if (!td.hasOwnProperty('radical')) {
+                        td.radical = new Set;
+                    }
+                    td.radical.add(i);
+
+                    // We recompute the title each time to keep it fresh, so you
+                    // can watch it grow as the animation progresses.
+                    td.title = '' + [...td.radical];
+
+                    // An earlier pass for a lower value of i may have already
+                    // visited some of these numbers (e.g., 6 12 18 etc. for 2,
+                    // prior to sieving out multiples of 3), so we test for an
+                    // unmarked td again, to avoid re-doing work we've already
+                    // done and delaying COMPOSITE_DELAY milliseconds.
+                    if (!td.hasOwnProperty('isPrime')) {
+                        td.isPrime = false;
+                        td.style.color = COMPOSITE_COLOR;
+                        yield COMPOSITE_DELAY;
+                    }
+
+                    j = j + i;  // continue to next multiple of i
+                }
+            }
+
+            i = i + 1;
+        }
+
+        // Now for fun, let us color Sophie Germain primes. A prime p is called
+        // a Sophie Germain prime if 2p+1 is also prime. The prime equal to 2p+1
+        // is called a safe prime. Marie-Sophie Germain (1776-1831) was a French
+        // mathematician, physicist, and philosopher.
+        i = 2;
+        while (i <= n) {
+            td = get(i);
+
+            // Be careful about calling get on an id greater than the maximum.
+            // We defend by saving the result in td2 and testing against null.
+            // You can also see how 2p+1 in Math becomes 2*p + 1 in JavaScript.
+            if (td.isPrime && (td2 = get(2*i + 1)) != null && td2.isPrime) {
+                td.style.color = isMersenne(i) ? MERSENNE_GERMAIN_COLOR : SOPHIE_GERMAIN_COLOR;
+                yield PRIME_DELAY;
+            }
+            i = i + 1;
+        }
+
+        alert("I'm hungry!");
+    }
+
+    // Write a one-line, color-coded legend telling what each text color means,
+    // separated by a horizontal rule (<hr>) from the table.
+    write('<span style="color:' + COMPOSITE_COLOR + '">Composite</span> | ' +
+          '<span style="color:' + PRIME_COLOR + '">Prime</span> | ' +
+          '<span style="color:' + MERSENNE_COLOR + '">Mersenne prime</span> | ' +
+          '<span style="color:' + SOPHIE_GERMAIN_COLOR + '">Sophie Germain prime</span> | ' +
+          '<span style="color:' + MERSENNE_GERMAIN_COLOR + '">Mersenne/Germain prime</span>' +
+          '<hr/>');
+
+    // Write the table whose data we'll re-color to show the sieve's progress.
+    table(MAXIMUM);
+
+    // The sieve generator returns an object with a .next() method that we will
+    // call to iterate over the steps of the sieve, using the window.setTimeout
+    // function to delay between each color update so we can see things change
+    // quickly, but not faster than the eye can follow.
+    var generator = sieve(MAXIMUM);
+    var stepCount = 0;
+
+    function step() {
+        stepCount = stepCount + 1;
+        // The next line is commented out. Remove the leading two slashes to see what it does.
+        //console.log('step ' + stepCount);
+
+        // Call the generator's next() method to resume it where it left off and
+        // find the next animation delay, if not done yet.
+        var result = generator.next();
+        if (!result.done) {
+            // This flavor of setTimeout takes a function to call after waiting
+            // the number of milliseconds given by the second parameter.
+            setTimeout(step, result.value);
+        }
+    }
+
+    // Call step once to kick off the animation. It will call itself indirectly
+    // via setTimeout after delaying the small returned value.
+    step();
+
+</script>
+</html>
